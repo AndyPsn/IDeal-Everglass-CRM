@@ -1,0 +1,79 @@
+{
+  "compilerOptions": {
+    /* === Chemins et Structure === */
+    "rootDir": "./src",                    // Dossier source TypeScript
+    "outDir": "./dist",                    // Dossier de sortie compilé
+    "baseUrl": "./",                       // Base pour les imports absolus
+    "paths": {
+      "@/*": ["src/*"]                     // Permet: import { } from '@/lib/prisma'
+    },
+
+    /* === Module et Target === */
+    "target": "ES2022",                    // JavaScript moderne (Node 18+)
+    "module": "commonjs",                  // Module Node.js standard
+    "lib": ["ES2022"],                     // APIs JavaScript disponibles
+    "moduleResolution": "node",            // Résolution à la Node.js
+
+    /* === Interopérabilité === */
+    "esModuleInterop": true,               // Import simplifié (import express from 'express')
+    "allowSyntheticDefaultImports": true,  // Permet les imports par défaut
+    "resolveJsonModule": true,             // Import de fichiers JSON
+    "forceConsistentCasingInFileNames": true, // Sensible à la casse (Windows/Linux)
+
+    /* === Type Checking Strict === */
+    "strict": true,                        // Active tous les checks stricts
+    "noImplicitAny": true,                 // Interdit 'any' implicite
+    "strictNullChecks": true,              // Vérifie null/undefined
+    "strictFunctionTypes": true,           // Vérifie les types de fonctions
+    "strictBindCallApply": true,           // Vérifie bind/call/apply
+    "strictPropertyInitialization": true,  // Propriétés de classe initialisées
+    "noImplicitThis": true,                // 'this' doit avoir un type explicite
+    "alwaysStrict": true,                  // Mode strict JavaScript
+
+    /* === Checks Supplémentaires === */
+    "noUnusedLocals": true,                // Erreur si variable non utilisée
+    "noUnusedParameters": true,            // Erreur si paramètre non utilisé
+    "noImplicitReturns": true,             // Toutes les branches doivent retourner
+    "noFallthroughCasesInSwitch": true,    // Pas de fallthrough dans switch
+    "noUncheckedIndexedAccess": true,      // Sécurise les accès tableau/objet
+    "exactOptionalPropertyTypes": true,    // Propriétés optionnelles strictes
+
+    /* === Output === */
+    "declaration": false,                  // Pas de fichiers .d.ts en prod
+    "declarationMap": false,               // Pas de declaration maps
+    "sourceMap": false,                    // Pas de source maps en prod (true pour debug)
+    "removeComments": true,                // Supprime les commentaires (fichiers plus légers)
+    "inlineSources": false,                // Ne pas inclure les sources
+    "noEmit": false,                       // Émet les fichiers compilés
+    "incremental": true,                   // Compilation incrémentale (plus rapide)
+
+    /* === Performance === */
+    "skipLibCheck": true,                  // Ignore les checks dans node_modules
+    "isolatedModules": true,               // Chaque fichier peut être compilé seul
+
+    /* === Décorateurs (si vous utilisez des libs comme TypeORM ou class-validator) === */
+    "experimentalDecorators": true,        // Active les décorateurs
+    "emitDecoratorMetadata": true          // Metadata pour les décorateurs
+  },
+
+  /* === Fichiers à inclure === */
+  "include": [
+    "src/**/*"                             // Tout dans src/
+  ],
+
+  /* === Fichiers à exclure === */
+  "exclude": [
+    "node_modules",                        // Dépendances
+    "dist",                                // Fichiers compilés
+    "**/*.test.ts",                        // Tests
+    "**/*.spec.ts",                        // Specs
+    "docker-compose.yml",
+    "Dockerfile"
+  ],
+
+  /* === Options TypeScript 5.x === */
+  "ts-node": {
+    "transpileOnly": true,                 // Plus rapide en dev
+    "files": true
+  }
+}
