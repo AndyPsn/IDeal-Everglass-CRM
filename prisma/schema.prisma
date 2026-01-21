@@ -1,15 +1,108 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+}
+
+// Modèle Utilisateur pour l'authentification
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  password  String   // Stocké hashé avec bcrypt
+  role      String   @default("user") // "user", "admin", "manager"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  activities Activity[]
+}
+
+// Modèle Client
+model Client {
+  id          Int       @id @default(autoincrement())
+  name        String
+  email       String?   @unique
+  phone       String?
+  company     String?
+  address     String?
+  city        String?
+  country     String?
+  status      String    @default("active") // "active", "inactive", "prospect"
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  contacts    Contact[]
+  deals       Deal[]
+  activities  Activity[]
+}
+
+// Modèle Contact (personnes chez le client)
+model Contact {
+  id        Int      @id @default(autoincrement())
+  clientId  Int
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  position  String?  // Poste dans l'entreprise
+  isPrimary Boolean  @default(false) // Contact principal
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@index([clientId])
+}
+
+// Modèle Opportunité/Deal
+model Deal {
+  id          Int      @id @default(autoincrement())
+  clientId    Int
+  title       String
+  amount      Decimal  @db.Decimal(10, 2)
+  currency    String   @default("EUR")
+  stage       String   @default("prospect") // "prospect", "negotiation", "won", "lost"
+  probability Int      @default(50) // Pourcentage de chance de conclure
+  expectedCloseDate DateTime?
+  actualCloseDate   DateTime?
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  activities  Activity[]
+  
+  @@index([clientId])
+}
+
+// Modèle Activité (historique des interactions)
+model Activity {
+  id          Int      @id @default(autoincrement())
+  type        String   // "call", "email", "meeting", "note", "task"
+  subject     String
+  description String?  @db.Text
+  date        DateTime @default(now())
+  clientId    Int?
+  dealId      Int?
+  userId      Int?
+  status      String   @default("completed") // "completed", "planned", "cancelled"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  deal        Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([clientId])
+  @@index([dealId])
+  @@index([userId])
 }
