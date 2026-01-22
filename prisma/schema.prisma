@@ -7,102 +7,254 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Modèle Utilisateur pour l'authentification
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String
-  password  String   // Stocké hashé avec bcrypt
-  role      String   @default("user") // "user", "admin", "manager"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relations
-  activities Activity[]
+// === STRUCTURE ORGANISATIONNELLE ===
+
+model Siege {
+  id         Int      @id @default(autoincrement())
+  nom        String   @default("Siège Principal")
+  adresse    String
+  ville      String?
+  codePostal String?
+  pays       String   @default("France")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  franchises Franchise[]
+  centres    Centre[]
 }
 
-// Modèle Client
-model Client {
-  id          Int       @id @default(autoincrement())
-  name        String
-  email       String?   @unique
-  phone       String?
-  company     String?
-  address     String?
-  city        String?
-  country     String?
-  status      String    @default("active") // "active", "inactive", "prospect"
-  notes       String?   @db.Text
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  // Relations
-  contacts    Contact[]
-  deals       Deal[]
-  activities  Activity[]
+model Franchise {
+  id         Int      @id @default(autoincrement())
+  siegeId    Int
+  nom        String
+  adresse    String
+  ville      String?
+  codePostal String?
+  telephone  String?
+  email      String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  siege   Siege    @relation(fields: [siegeId], references: [id])
+  centres Centre[]
+
+  @@index([siegeId])
 }
 
-// Modèle Contact (personnes chez le client)
-model Contact {
-  id        Int      @id @default(autoincrement())
-  clientId  Int
-  firstName String
-  lastName  String
+model Centre {
+  id            Int      @id @default(autoincrement())
+  franchiseId   Int?
+  siegeId       Int?
+  nom           String
+  adresse       String
+  ville         String
+  codePostal    String
+  telephone     String?
+  email         String?
+  capaciteStock Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  franchise Franchise?      @relation(fields: [franchiseId], references: [id])
+  siege     Siege?          @relation(fields: [siegeId], references: [id])
+  employes  Employe[]
+  dossiers  DossierClient[]
+  stocks    Stock[]
+
+  @@index([franchiseId])
+  @@index([siegeId])
+}
+
+// === RESSOURCES HUMAINES ===
+
+enum Role {
+  SUPER_ADMIN
+  FRANCHISE_ADMIN
+  CENTRE_MANAGER
+  COMMERCIAL
+  TECHNICIEN
+  ASSISTANT
+}
+
+model Employe {
+  id           Int       @id @default(autoincrement())
+  centreId     Int
+  nom          String
+  prenom       String
+  email        String    @unique
+  telephone    String?
+  password     String
+  role         Role      @default(COMMERCIAL)
+  rang         Int?
+  isActive     Boolean   @default(true)
+  dateEmbauche DateTime  @default(now())
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  centre        Centre          @relation(fields: [centreId], references: [id])
+  dossiersGeres DossierClient[] @relation("CommercialAffilie")
+  activites     Activite[]
+
+  @@index([centreId])
+}
+
+// === CLIENTS & VÉHICULES ===
+
+enum EtatDossier {
+  PROSPECT
+  EN_COURS
+  ATTENTE_PIECES
+  TERMINE
+  FACTURE
+  ANNULE
+}
+
+model DossierClient {
+  id           Int  @id @default(autoincrement())
+  centreId     Int
+  commercialId Int?
+
+  nom       String
+  prenom    String
   email     String?
-  phone     String?
-  position  String?  // Poste dans l'entreprise
-  isPrimary Boolean  @default(false) // Contact principal
+  telephone String
+
+  etat          EtatDossier @default(EN_COURS)
+  dateEntree    DateTime    @default(now())
+  nombreRappels Int         @default(0)
+
+  cadeau      String? @db.Text
+  brisDeGlace Boolean @default(false)
+  franchise   Boolean @default(false)
+  assurance   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  // Relations
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  
-  @@index([clientId])
+
+  centre     Centre     @relation(fields: [centreId], references: [id])
+  commercial Employe?   @relation("CommercialAffilie", fields: [commercialId], references: [id])
+  vehicules  Vehicule[]
+  documents  Document[]
+  rappels    Rappel[]
+  activites  Activite[]
+
+  @@index([centreId])
+  @@index([commercialId])
+  @@index([etat])
 }
 
-// Modèle Opportunité/Deal
-model Deal {
-  id          Int      @id @default(autoincrement())
-  clientId    Int
-  title       String
-  amount      Decimal  @db.Decimal(10, 2)
-  currency    String   @default("EUR")
-  stage       String   @default("prospect") // "prospect", "negotiation", "won", "lost"
-  probability Int      @default(50) // Pourcentage de chance de conclure
-  expectedCloseDate DateTime?
-  actualCloseDate   DateTime?
-  description String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relations
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  activities  Activity[]
-  
-  @@index([clientId])
+model Vehicule {
+  id              Int     @id @default(autoincrement())
+  dossierId       Int
+  marque          String
+  modele          String
+  immatriculation String  @unique
+  annee           Int?
+  couleur         String?
+
+  dossier DossierClient @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  @@index([dossierId])
+  @@index([immatriculation])
 }
 
-// Modèle Activité (historique des interactions)
-model Activity {
+// === DOCUMENTS ===
+
+enum TypeDocument {
+  PHOTO_PROBLEME
+  CARTE_GRISE
+  CONTROLE_TECHNIQUE
+  BON_LIVRAISON
+  FACTURE
+  DEVIS
+  AUTRE
+}
+
+model Document {
+  id         Int          @id @default(autoincrement())
+  dossierId  Int
+  type       TypeDocument
+  nom        String
+  urlFichier String
+  taille     Int?
+  uploadedAt DateTime     @default(now())
+
+  dossier DossierClient @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  @@index([dossierId])
+}
+
+// === RAPPELS ===
+
+enum StatutRappel {
+  PLANIFIE
+  EFFECTUE
+  MANQUE
+  ANNULE
+}
+
+model Rappel {
+  id         Int          @id @default(autoincrement())
+  dossierId  Int
+  dateRappel DateTime
+  statut     StatutRappel @default(PLANIFIE)
+  notes      String?      @db.Text
+  createdAt  DateTime     @default(now())
+
+  dossier DossierClient @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  @@index([dossierId])
+  @@index([dateRappel])
+  @@index([statut])
+}
+
+// === ACTIVITÉS/HISTORIQUE ===
+
+enum TypeActivite {
+  APPEL
+  EMAIL
+  VISITE
+  RAPPEL
+  NOTE
+  INTERVENTION
+  LIVRAISON
+}
+
+model Activite {
+  id          Int          @id @default(autoincrement())
+  dossierId   Int?
+  employeId   Int?
+  type        TypeActivite
+  sujet       String
+  description String?      @db.Text
+  date        DateTime     @default(now())
+
+  dossier DossierClient? @relation(fields: [dossierId], references: [id], onDelete: SetNull)
+  employe Employe?       @relation(fields: [employeId], references: [id], onDelete: SetNull)
+
+  @@index([dossierId])
+  @@index([employeId])
+  @@index([date])
+}
+
+// === STOCK ===
+
+model Stock {
   id          Int      @id @default(autoincrement())
-  type        String   // "call", "email", "meeting", "note", "task"
-  subject     String
-  description String?  @db.Text
-  date        DateTime @default(now())
-  clientId    Int?
-  dealId      Int?
-  userId      Int?
-  status      String   @default("completed") // "completed", "planned", "cancelled"
-  createdAt   DateTime @default(now())
+  centreId    Int
+  reference   String
+  designation String
+  quantite    Int      @default(0)
+  seuil       Int      @default(5)
+  prixAchat   Decimal? @db.Decimal(10, 2)
+  prixVente   Decimal? @db.Decimal(10, 2)
   updatedAt   DateTime @updatedAt
-  
-  // Relations
-  client      Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  deal        Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
-  @@index([clientId])
-  @@index([dealId])
-  @@index([userId])
+
+  centre Centre @relation(fields: [centreId], references: [id])
+
+  @@unique([centreId, reference])
+  @@index([centreId])
 }
