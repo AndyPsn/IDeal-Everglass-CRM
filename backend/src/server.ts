@@ -56,7 +56,7 @@ app.get('/api/clients', async (req: Request, res: Response) => {
   try {
     const clients = await prisma.client.findMany();
     res.json({
-      success: true,
+      success: true, 
       count: clients.length,
       data: clients
     });

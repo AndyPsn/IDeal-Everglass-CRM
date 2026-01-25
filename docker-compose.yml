@@ -1,42 +1,110 @@
 services:
-  # Application Node.js
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=mysql://root:rootpassword@db:3306/everglass_crm_dev
-      - PORT=3000
-    depends_on:
-      - db
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: npm run dev
-
   # Base de données MySQL
-  db:
+  mysql:
     image: mysql:8.0
+    container_name: everglass-mysql
+    restart: unless-stopped
     ports:
       - "3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
-      - MYSQL_DATABASE=everglass_crm_dev
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: everglass_crm_dev
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - everglass-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s          # ← Vérifie plus souvent
+      timeout: 10s          # ← Plus de temps par tentative
+      retries: 20           # ← Plus de tentatives
+      start_period: 60s     # ← 60s avant de commencer les checks
 
-  # phpMyAdmin pour gérer la base facilement
+  # phpMyAdmin pour gérer la base
   phpmyadmin:
-    image: phpmyadmin/phpmyadmin
+    image: phpmyadmin:latest
+    container_name: everglass-phpmyadmin
+    restart: unless-stopped
     ports:
       - "8080:80"
     environment:
-      - PMA_HOST=db
-      - PMA_HOST=db
-      - PMA_ARBITRARY=1  
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: rootpassword
     depends_on:
-      - db
+      mysql:
+        condition: service_healthy
+    networks:
+      - everglass-network
+
+  # Backend API (Express + TypeScript)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: everglass-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount du code source pour hot reload
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      # Éviter d'écraser node_modules du container
+      - backend_node_modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: "mysql://root:rootpassword@mysql:3306/everglass_crm_dev"
+      SESSION_SECRET: "dev-secret-change-in-production"
+      DISABLE_ERD: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - everglass-network
+    # Nodemon pour auto-reload
+    command: sh -c "npx prisma generate && npm run dev"
+
+  # Frontend React (Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: everglass-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      # Mount du code source pour hot reload
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      # Éviter d'écraser node_modules du container
+      - frontend_node_modules:/app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:3000
+    depends_on:
+      - backend
+    networks:
+      - everglass-network
+    # Vite avec HMR (Hot Module Replacement)
+    command: npm run dev
 
 volumes:
   mysql_data:
+    driver: local
+  backend_node_modules:
+    driver: local
+  frontend_node_modules:
+    driver: local
+
+networks:
+  everglass-network:
+    driver: bridge

@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     /* === Chemins et Structure === */
-    "rootDir": "./src",                    // Dossier source TypeScript
+    "rootDir": "src",                    // Dossier source TypeScript
     "outDir": "./dist",                    // Dossier de sortie compilé
     "baseUrl": "./",                       // Base pour les imports absolus
     "paths": {
