@@ -1,18 +1,21 @@
+// ============================================================================
+// EVERGLASS CRM - SCHEMA PRISMA COMPLET
+// Version: 2.0
+// Date: Janvier 2025
+// ============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
-
-// generator erd {
-//  provider = "prisma-erd-generator"
-//  output   = "../ERD.svg"
-// }
 
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-// === STRUCTURE ORGANISATIONNELLE ===
+// ============================================================================
+// STRUCTURE ORGANISATIONNELLE
+// ============================================================================
 
 model Siege {
   id         Int      @id @default(autoincrement())
@@ -21,11 +24,13 @@ model Siege {
   ville      String?
   codePostal String?
   pays       String   @default("France")
+  telephone  String?
+  email      String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   franchises Franchise[]
-  centres    Centre[]
+  employes   Employe[]   // Employés niveau siège
 }
 
 model Franchise {
@@ -41,16 +46,17 @@ model Franchise {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  siege   Siege    @relation(fields: [siegeId], references: [id])
-  centres Centre[]
+  siege    Siege     @relation(fields: [siegeId], references: [id])
+  centres  Centre[]
+  employes Employe[] // Employés niveau franchise
 
   @@index([siegeId])
+  @@index([isActive])
 }
 
 model Centre {
   id            Int      @id @default(autoincrement())
-  franchiseId   Int?
-  siegeId       Int?
+  franchiseId   Int
   nom           String
   adresse       String
   ville         String
@@ -62,51 +68,130 @@ model Centre {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  franchise Franchise?      @relation(fields: [franchiseId], references: [id])
-  siege     Siege?          @relation(fields: [siegeId], references: [id])
-  employes  Employe[]
-  dossiers  DossierClient[]
-  stocks    Stock[]
+  franchise    Franchise             @relation(fields: [franchiseId], references: [id])
+  employes     Employe[]             // Employés niveau centre
+  dossiers     DossierClient[]
+  stocks       Stock[]
+  affectations AffectationCentre[]
+  snapshots    StatSnapshot[]
 
   @@index([franchiseId])
-  @@index([siegeId])
+  @@index([isActive])
 }
 
-// === RESSOURCES HUMAINES ===
+// ============================================================================
+// RESSOURCES HUMAINES & AUTHENTIFICATION
+// ============================================================================
 
 enum Role {
-  SUPER_ADMIN
-  FRANCHISE_ADMIN
-  CENTRE_MANAGER
+  ADMIN_SIEGE
+  ADMIN_FRANCHISE
   COMMERCIAL
+  RESPONSABLE_CENTRE
+  SECRETAIRE
   TECHNICIEN
-  ASSISTANT
+}
+
+enum Niveau {
+  SIEGE     // Accès global, peut être affecté à tous les centres
+  FRANCHISE // Accès franchise, peut être affecté aux centres de sa franchise
+  CENTRE    // Accès local, affecté uniquement à son centre
 }
 
 model Employe {
-  id           Int       @id @default(autoincrement())
-  centreId     Int
-  nom          String
-  prenom       String
-  email        String    @unique
-  telephone    String?
-  password     String
-  role         Role      @default(COMMERCIAL)
-  rang         Int?
+  id        Int     @id @default(autoincrement())
+  username  String  @unique   // Identifiant de connexion (pseudonyme)
+  email     String  @unique   // Email conservé pour communications
+  password  String
+  nom       String
+  prenom    String
+  telephone String?
+
+  // === RÔLE ET NIVEAU ===
+  role   Role   @default(SECRETAIRE)
+  niveau Niveau @default(CENTRE)
+
+  // === RATTACHEMENT HIÉRARCHIQUE ===
+  // Un seul champ renseigné selon le niveau
+  siegeId     Int? // Si niveau = SIEGE
+  franchiseId Int? // Si niveau = FRANCHISE
+  centreId    Int? // Si niveau = CENTRE
+
+  // === STATUT ===
   isActive     Boolean   @default(true)
   dateEmbauche DateTime  @default(now())
-  lastLogin    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
 
-  centre        Centre          @relation(fields: [centreId], references: [id])
-  dossiersGeres DossierClient[] @relation("CommercialAffilie")
-  activites     Activite[]
+  // === AUTHENTIFICATION ===
+  lastLogin            DateTime?
+  failedLoginAttempts  Int       @default(0)
+  lockedUntil          DateTime?
+  passwordChangedAt    DateTime?
+  mustChangePassword   Boolean   @default(true)
 
+  // === MÉTADONNÉES ===
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // === RELATIONS ===
+  siege     Siege?     @relation(fields: [siegeId], references: [id])
+  franchise Franchise? @relation(fields: [franchiseId], references: [id])
+  centre    Centre?    @relation(fields: [centreId], references: [id])
+
+  affectations   AffectationCentre[]
+  interventions  InterventionCommercial[]
+  activites      Activite[]
+  createdDossiers DossierClient[] @relation("CreateurDossier")
+
+  @@index([siegeId])
+  @@index([franchiseId])
+  @@index([centreId])
+  @@index([role])
+  @@index([niveau])
+  @@index([isActive])
+  @@index([username])
+}
+
+// ============================================================================
+// AFFECTATIONS & PERMISSIONS
+// ============================================================================
+
+// Table de liaison : quels centres un employé peut voir/modifier
+model AffectationCentre {
+  id         Int      @id @default(autoincrement())
+  employeId  Int
+  centreId   Int
+  
+  // Permissions granulaires (optionnel, pour restrictions fines)
+  canView    Boolean  @default(true)
+  canEdit    Boolean  @default(true)
+  
+  assignedAt DateTime @default(now())
+  assignedBy Int?     // ID de l'admin qui a fait l'affectation
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  centre  Centre  @relation(fields: [centreId], references: [id], onDelete: Cascade)
+
+  @@unique([employeId, centreId])
+  @@index([employeId])
   @@index([centreId])
 }
 
-// === CLIENTS & VÉHICULES ===
+// ============================================================================
+// SESSIONS (pour express-session avec MySQL)
+// ============================================================================
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String   @db.Text
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// CLIENTS & DOSSIERS
+// ============================================================================
 
 enum EtatDossier {
   PROSPECT
@@ -114,43 +199,91 @@ enum EtatDossier {
   ASSURANCE_A_CONTACTER
   VITRAGE_A_COMMANDER
   VITRAGE_RECU
-  DOCUMENT_ENVOYER
+  INTERVENTION_PLANIFIEE
+  INTERVENTION_TERMINEE
+  DOCUMENT_ENVOYE
+  CLOTURE
   ANNULE
 }
 
 model DossierClient {
-  id           Int  @id @default(autoincrement())
-  centreId     Int
-  commercialId Int?
+  id       Int @id @default(autoincrement())
+  centreId Int
 
+  // === INFORMATIONS CLIENT ===
   nom       String
   prenom    String
   email     String?
   telephone String
 
+  // === ÉTAT ET SUIVI ===
   etat          EtatDossier @default(PROSPECT)
   dateEntree    DateTime    @default(now())
+  dateCloture   DateTime?
   nombreRappels Int         @default(0)
 
-  cadeau      String? @db.Text
-  brisDeGlace Boolean @default(false)
-  franchise   Boolean @default(false)
-  assurance   String?
+  // === DÉTAILS MÉTIER ===
+  cadeau        String?  @db.Text
+  cadeauDonne   Boolean  @default(false)
+  brisDeGlace   Boolean  @default(false)
+  franchise     Boolean  @default(false)
+  assurance     String?
+  notes         String?  @db.Text
 
+  // === TRAÇABILITÉ ===
+  createurId Int? // Employé qui a créé le dossier
+
+  // === MÉTADONNÉES ===
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  centre     Centre     @relation(fields: [centreId], references: [id])
-  commercial Employe?   @relation("CommercialAffilie", fields: [commercialId], references: [id])
-  vehicules  Vehicule[]
-  documents  Document[]
-  rappels    Rappel[]
-  activites  Activite[]
+  // === RELATIONS ===
+  centre    Centre   @relation(fields: [centreId], references: [id])
+  createur  Employe? @relation("CreateurDossier", fields: [createurId], references: [id], onDelete: SetNull)
+
+  vehicules     Vehicule[]
+  documents     Document[]
+  rappels       Rappel[]
+  activites     Activite[]
+  interventions InterventionCommercial[]
 
   @@index([centreId])
-  @@index([commercialId])
+  @@index([createurId])
   @@index([etat])
+  @@index([dateEntree])
+  @@index([createdAt])
 }
+
+// Track des interventions commerciales sur les dossiers (pour stats)
+model InterventionCommercial {
+  id        Int      @id @default(autoincrement())
+  dossierId Int
+  employeId Int
+  
+  dateDebut DateTime @default(now())
+  dateFin   DateTime?
+  
+  // Statistiques d'intervention
+  nombreAppels   Int @default(0)
+  nombreEmails   Int @default(0)
+  nombreRdv      Int @default(0)
+  
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dossier DossierClient @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  employe Employe       @relation(fields: [employeId], references: [id], onDelete: Cascade)
+
+  @@unique([dossierId, employeId])
+  @@index([dossierId])
+  @@index([employeId])
+  @@index([dateDebut])
+}
+
+// ============================================================================
+// VÉHICULES
+// ============================================================================
 
 model Vehicule {
   id              Int     @id @default(autoincrement())
@@ -160,6 +293,7 @@ model Vehicule {
   immatriculation String  @unique
   annee           Int?
   couleur         String?
+  typeVitrage     String? // Pare-brise, lunette arrière, etc.
 
   dossier DossierClient @relation(fields: [dossierId], references: [id], onDelete: Cascade)
 
@@ -167,13 +301,18 @@ model Vehicule {
   @@index([immatriculation])
 }
 
-// === DOCUMENTS ===
+// ============================================================================
+// DOCUMENTS
+// ============================================================================
 
 enum TypeDocument {
   PHOTO_PROBLEME
   CARTE_GRISE
   CONTROLE_TECHNIQUE
+  PERMIS_CONDUIRE
+  ATTESTATION_ASSURANCE
   BON_LIVRAISON
+  BON_INTERVENTION
   FACTURE
   DEVIS
   AUTRE
@@ -185,48 +324,68 @@ model Document {
   type       TypeDocument
   nom        String
   urlFichier String
-  taille     Int?
+  taille     Int?         // En octets
+  mimeType   String?
+  uploadedBy Int?         // ID de l'employé qui a uploadé
   uploadedAt DateTime     @default(now())
 
   dossier DossierClient @relation(fields: [dossierId], references: [id], onDelete: Cascade)
 
   @@index([dossierId])
+  @@index([type])
 }
 
-// === RAPPELS ===
+// ============================================================================
+// RAPPELS
+// ============================================================================
 
 enum StatutRappel {
   PLANIFIE
   EFFECTUE
   MANQUE
+  REPORTE
   ANNULE
 }
 
 model Rappel {
-  id         Int          @id @default(autoincrement())
-  dossierId  Int
-  dateRappel DateTime
-  statut     StatutRappel @default(PLANIFIE)
-  notes      String?      @db.Text
-  createdAt  DateTime     @default(now())
+  id          Int          @id @default(autoincrement())
+  dossierId   Int
+  assigneA    Int?         // Employé assigné au rappel
+  dateRappel  DateTime
+  statut      StatutRappel @default(PLANIFIE)
+  priorite    Int          @default(1) // 1=normal, 2=important, 3=urgent
+  notes       String?      @db.Text
+  resultat    String?      @db.Text // Ce qui s'est passé
+  createdAt   DateTime     @default(now())
+  completedAt DateTime?
 
   dossier DossierClient @relation(fields: [dossierId], references: [id], onDelete: Cascade)
 
   @@index([dossierId])
+  @@index([assigneA])
   @@index([dateRappel])
   @@index([statut])
+  @@index([priorite])
 }
 
-// === ACTIVITÉS/HISTORIQUE ===
+// ============================================================================
+// ACTIVITÉS / HISTORIQUE
+// ============================================================================
 
 enum TypeActivite {
-  APPEL
-  EMAIL
+  APPEL_ENTRANT
+  APPEL_SORTANT
+  EMAIL_ENVOYE
+  EMAIL_RECU
+  SMS_ENVOYE
   VISITE
-  RAPPEL
-  NOTE
+  RDV_PLANIFIE
   INTERVENTION
   LIVRAISON
+  NOTE
+  CHANGEMENT_ETAT
+  DOCUMENT_AJOUTE
+  AUTRE
 }
 
 model Activite {
@@ -236,6 +395,12 @@ model Activite {
   type        TypeActivite
   sujet       String
   description String?      @db.Text
+  
+  // Métadonnées optionnelles
+  ancienEtat  EtatDossier?
+  nouvelEtat  EtatDossier?
+  duree       Int?         // En minutes (pour appels/rdv)
+  
   date        DateTime     @default(now())
 
   dossier DossierClient? @relation(fields: [dossierId], references: [id], onDelete: SetNull)
@@ -243,24 +408,95 @@ model Activite {
 
   @@index([dossierId])
   @@index([employeId])
+  @@index([type])
   @@index([date])
 }
 
-// === STOCK ===
+// ============================================================================
+// STOCK
+// ============================================================================
 
 model Stock {
   id          Int      @id @default(autoincrement())
   centreId    Int
   reference   String
   designation String
+  categorie   String?  // Pare-brise, accessoire, etc.
   quantite    Int      @default(0)
-  seuil       Int      @default(5)
-  prixAchat   Decimal? @db.Decimal(10, 2)
-  prixVente   Decimal? @db.Decimal(10, 2)
+  seuil       Int      @default(5) // Alerte si quantité < seuil
+  emplacement String?  // Localisation dans le stock
   updatedAt   DateTime @updatedAt
 
   centre Centre @relation(fields: [centreId], references: [id])
 
+  mouvements MouvementStock[]
+
   @@unique([centreId, reference])
   @@index([centreId])
+  @@index([reference])
+  @@index([quantite])
+}
+
+enum TypeMouvement {
+  ENTREE
+  SORTIE
+  INVENTAIRE
+  TRANSFERT
+}
+
+model MouvementStock {
+  id         Int           @id @default(autoincrement())
+  stockId    Int
+  type       TypeMouvement
+  quantite   Int           // Positive pour entrée, négative pour sortie
+  motif      String?
+  employeId  Int?          // Qui a fait le mouvement
+  createdAt  DateTime      @default(now())
+
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@index([stockId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// STATISTIQUES (Snapshots quotidiens)
+// ============================================================================
+
+model StatSnapshot {
+  id       Int      @id @default(autoincrement())
+  centreId Int
+  date     DateTime @db.Date // Un snapshot par jour par centre
+
+  // === COMPTEURS PAR ÉTAT ===
+  nbProspect              Int @default(0)
+  nbDocumentManquant      Int @default(0)
+  nbAssuranceAContacter   Int @default(0)
+  nbVitrageACommander     Int @default(0)
+  nbVitrageRecu           Int @default(0)
+  nbInterventionPlanifiee Int @default(0)
+  nbInterventionTerminee  Int @default(0)
+  nbDocumentEnvoye        Int @default(0)
+  nbCloture               Int @default(0)
+  nbAnnule                Int @default(0)
+
+  // === TOTAUX ===
+  nbDossiersTotal   Int @default(0)
+  nbDossiersActifs  Int @default(0) // Non clôturés/annulés
+  nbNouveauxDossiers Int @default(0) // Créés ce jour
+
+  // === ACTIVITÉ ===
+  nbAppels        Int @default(0)
+  nbEmails        Int @default(0)
+  nbInterventions Int @default(0)
+  nbRappelsEffectues Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  centre Centre @relation(fields: [centreId], references: [id], onDelete: Cascade)
+
+  @@unique([centreId, date])
+  @@index([centreId])
+  @@index([date])
 }
