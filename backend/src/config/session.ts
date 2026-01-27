@@ -26,11 +26,11 @@ export const authConfig: AuthSecurityConfig = {
   
   // Politique de mot de passe
   passwordPolicy: {
-    minLength: 8,
+    minLength: 13,
     requireUppercase: true,
     requireLowercase: true,
     requireNumbers: true,
-    requireSpecialChars: false, // Optionnel pour commencer
+    requireSpecialChars: true, 
   },
   
   // Politique de pseudonyme
@@ -48,11 +48,10 @@ export const authConfig: AuthSecurityConfig = {
 const sessionStore = new PrismaSessionStore(prisma as unknown as PrismaClient, {
   checkPeriod: 2 * 60 * 1000,     // Nettoyage sessions expirées toutes les 2 min
   dbRecordIdIsSessionId: true,    // Utilise l'ID de session comme ID de record
-  dbRecordIdFunction: undefined,  // Pas de fonction custom pour l'ID
 });
 
 // =========================
-// CONFIGURATION SESSION
+// CONFIGURATION SESSION 
 // =========================
 
 // Vérifie que SESSION_SECRET est défini
@@ -90,7 +89,7 @@ export const sessionConfig: session.SessionOptions = {
     
     // sameSite : protection CSRF
     sameSite: 'lax',
-    
+
     // path : cookie valide pour tout le site
     path: '/',
   },
@@ -98,7 +97,7 @@ export const sessionConfig: session.SessionOptions = {
   // Rolling : renouvelle l'expiration à chaque requête (reset 45 min)
   rolling: true,
 };
-
+ 
 // =========================
 // MIDDLEWARE SESSION
 // =========================
